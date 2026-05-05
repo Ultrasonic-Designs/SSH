@@ -1,0 +1,33 @@
+name: Ubuntu VPS
+on: workflow_dispatch
+
+jobs:
+  vps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH & Tunnel
+        run: |
+          # 1. Setup SSH with Password Auth
+          sudo apt-get update && sudo apt-get install -y openssh-server
+          echo "runner:rohan2026" | sudo chpasswd
+          sudo sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+
+          # 2. Install cloudflared
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+          # 3. Start Tunnel and WAIT for the link
+          # We use --logfile so we can read the URL it generates
+          cloudflared tunnel --url ssh://localhost:22 --logfile tunnel.log > /dev/null 2>&1 &
+          
+          echo "Waiting for Cloudflare link..."
+          sleep 10
+          echo "=========================================="
+          grep -o 'https://[^[:space:]]*\.trycloudflare\.com' tunnel.log || echo "Failed to find link. Try refreshing the log."
+          echo "=========================================="
+          
+          # 4. KEEP ALIVE (Crucial: This keeps the tunnel process from being killed)
+          echo "VPS is live for 6 hours. Do not cancel the run!"
+          sleep 21600
